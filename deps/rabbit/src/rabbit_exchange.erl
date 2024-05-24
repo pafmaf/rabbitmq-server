@@ -91,20 +91,39 @@ serial(X) ->
         true -> rabbit_db_exchange:next_serial(X#exchange.name)
     end.
 
+
+-spec new(name(), type(), boolean(), boolean(), boolean(),
+         rabbit_framing:amqp_table(), rabbit_types:username())
+        -> rabbit_types:exchange(). % FIXME: or undefined / nil / whatever
+
+new(XName, Type, Durable, AutoDelete, Internal, Args, Username)
+    when 
+        is_record(XName, resource) andalso
+        is_atom(Type) andalso
+        is_boolean(Durable) andalso
+        is_boolean(AutoDelete) andalso
+        is_boolean(Internal) andalso
+        is_list(Args) andalso
+        (is_binary(Username)) ->
+            #exchange{name        = XName,
+                        type        = Type,
+                        durable     = Durable,
+                        auto_delete = AutoDelete,
+                        internal    = Internal,
+                        arguments   = Args,
+                        options     = #{user => Username}}.
+
 -spec declare
         (name(), type(), boolean(), boolean(), boolean(),
          rabbit_framing:amqp_table(), rabbit_types:username())
         -> rabbit_types:exchange().
 
 declare(XName, Type, Durable, AutoDelete, Internal, Args, Username) ->
-    X = rabbit_exchange_decorator:set(
-          rabbit_policy:set(#exchange{name        = XName,
-                                      type        = Type,
-                                      durable     = Durable,
-                                      auto_delete = AutoDelete,
-                                      internal    = Internal,
-                                      arguments   = Args,
-                                      options     = #{user => Username}})),
+    %% returns nothing if passed parameters are invalid
+    Xmaybe = new(XName, Type, Durable, AutoDelete, Internal, Args, Username),
+
+    %% check if exchange is set, expecting error during creation otherwise
+    X = rabbit_exchange_decorator:set(rabbit_policy:set(Xmaybe)),
     XT = type_to_module(Type),
     %% We want to upset things if it isn't ok
     ok = XT:validate(X),
